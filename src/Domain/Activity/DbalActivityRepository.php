@@ -131,6 +131,37 @@ final class DbalActivityRepository implements ActivityRepository
         ));
     }
 
+    public function findByDateRange(SerializableDateTime $startDate, SerializableDateTime $endDate, ?ActivityType $activityType): Activities
+    {
+        $queryBuilder = $this->connection->createQueryBuilder();
+        $queryBuilder->select('*')
+            ->from('Activity')
+            ->andWhere('startDateTime BETWEEN :startDateTimeStart AND :startDateTimeEnd')
+            ->setParameter(
+                key: 'startDateTimeStart',
+                value: $startDate->format('Y-m-d 00:00:00'),
+            )
+            ->setParameter(
+                key: 'startDateTimeEnd',
+                value: $endDate->format('Y-m-d 23:59:59'),
+            )
+            ->orderBy('startDateTime', 'DESC');
+
+        if ($activityType) {
+            $queryBuilder->andWhere('sportType IN (:sportTypes)')
+                ->setParameter(
+                    key: 'sportTypes',
+                    value: array_map(fn (SportType $sportType) => $sportType->value, $activityType->getSportTypes()->toArray()),
+                    type: ArrayParameterType::STRING
+                );
+        }
+
+        return Activities::fromArray(array_map(
+            fn (array $result): Activity => $this->hydrate($result),
+            $queryBuilder->executeQuery()->fetchAllAssociative()
+        ));
+    }
+
     public function findBySportTypes(SportTypes $sportTypes): Activities
     {
         // @TODO: Add static cache to this call.

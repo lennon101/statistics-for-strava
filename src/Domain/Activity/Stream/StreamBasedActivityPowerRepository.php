@@ -52,20 +52,26 @@ final class StreamBasedActivityPowerRepository implements ActivityPowerRepositor
         }
 
         $activities = $this->activityRepository->findAll();
+        
+        // Optimization: Fetch all WATTS streams in a single query instead of querying per activity (N+1 problem)
+        $powerStreams = $this->activityStreamRepository->findByStreamType(StreamType::WATTS);
+        $powerStreamsByActivityId = [];
+        foreach ($powerStreams as $powerStream) {
+            $powerStreamsByActivityId[(string) $powerStream->getActivityId()] = $powerStream;
+        }
+        
         /** @var Activity $activity */
         foreach ($activities as $activity) {
             StreamBasedActivityPowerRepository::$cachedPowerOutputs[(string) $activity->getId()] = PowerOutputs::empty();
             StreamBasedActivityPowerRepository::$cachedNormalizedPowers[(string) $activity->getId()] = null;
 
-            try {
-                $powerStreamForActivity = $this->activityStreamRepository->findOneByActivityAndStreamType(
-                    activityId: $activity->getId(),
-                    streamType: StreamType::WATTS
-                );
-                StreamBasedActivityPowerRepository::$cachedNormalizedPowers[(string) $activity->getId()] = $powerStreamForActivity->getNormalizedPower();
-            } catch (EntityNotFound) {
+            $activityIdKey = (string) $activity->getId();
+            if (!isset($powerStreamsByActivityId[$activityIdKey])) {
                 continue;
             }
+            
+            $powerStreamForActivity = $powerStreamsByActivityId[$activityIdKey];
+            StreamBasedActivityPowerRepository::$cachedNormalizedPowers[$activityIdKey] = $powerStreamForActivity->getNormalizedPower();
 
             $bestAverages = $powerStreamForActivity->getBestAverages();
 
@@ -84,7 +90,7 @@ final class StreamBasedActivityPowerRepository implements ActivityPowerRepositor
                 }
 
                 $relativePower = $athleteWeight->toFloat() > 0 ? round($bestAverageForTimeInterval / $athleteWeight->toFloat(), 2) : 0;
-                StreamBasedActivityPowerRepository::$cachedPowerOutputs[(string) $activity->getId()]->add(PowerOutput::fromState(
+                StreamBasedActivityPowerRepository::$cachedPowerOutputs[$activityIdKey]->add(PowerOutput::fromState(
                     timeIntervalInSeconds: $timeIntervalInSeconds,
                     formattedTimeInterval: (int) $interval->totalHours ? $interval->totalHours.' h' : ((int) $interval->totalMinutes ? $interval->totalMinutes.' m' : $interval->totalSeconds.' s'),
                     power: $bestAverageForTimeInterval,

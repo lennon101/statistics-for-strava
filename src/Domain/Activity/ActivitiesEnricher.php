@@ -37,6 +37,13 @@ final class ActivitiesEnricher
         $customGearTags = $this->customGearConfig->getAllGearTags();
         $activities = $this->activityRepository->findAll();
 
+        // Optimization: Fetch all cadence streams in a single query instead of querying per activity (N+1 problem)
+        $cadenceStreams = $this->activityStreamRepository->findByStreamType(StreamType::CADENCE);
+        $cadenceStreamsByActivityId = [];
+        foreach ($cadenceStreams as $cadenceStream) {
+            $cadenceStreamsByActivityId[(string) $cadenceStream->getActivityId()] = $cadenceStream;
+        }
+
         foreach ($activities as $activity) {
             $activity->enrichWithBestPowerOutputs(
                 $this->activityPowerRepository->findBest($activity->getId())
@@ -49,18 +56,15 @@ final class ActivitiesEnricher
                 ...$customGearTags,
             ]);
 
-            try {
-                $cadenceStream = $this->activityStreamRepository->findOneByActivityAndStreamType(
-                    activityId: $activity->getId(),
-                    streamType: StreamType::CADENCE
-                );
-
+            $activityIdKey = (string) $activity->getId();
+            if (isset($cadenceStreamsByActivityId[$activityIdKey])) {
+                $cadenceStream = $cadenceStreamsByActivityId[$activityIdKey];
                 if (!empty($cadenceStream->getData())) {
                     $activity->enrichWithMaxCadence(max($cadenceStream->getData()));
                 }
-            } catch (EntityNotFound) {
             }
-            $this->activitiesKeyedByActivityId[(string) $activity->getId()] = $activity;
+            
+            $this->activitiesKeyedByActivityId[$activityIdKey] = $activity;
         }
 
         $this->enrichedActivities = $activities;

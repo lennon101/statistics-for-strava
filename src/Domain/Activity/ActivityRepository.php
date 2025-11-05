@@ -18,6 +18,8 @@ interface ActivityRepository
 
     public function findByStartDate(SerializableDateTime $startDate, ?ActivityType $activityType): Activities;
 
+    public function findByDateRange(SerializableDateTime $startDate, SerializableDateTime $endDate, ?ActivityType $activityType): Activities;
+
     public function findBySportTypes(SportTypes $sportTypes): Activities;
 
     public function hasForSportTypes(SportTypes $sportTypes): bool;
