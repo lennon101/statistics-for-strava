@@ -38,17 +38,23 @@ final readonly class Calendar
 
         // Optimization: Fetch all activities for the entire range in a single query
         // instead of querying for each day individually (N+1 query problem)
+        // Calculate first day (might be from previous month)
+        $firstDayNumber = $numberOfDaysInPreviousMonth - ($this->month->getWeekDayOfFirstDay() - 2);
         $firstDayToShow = SerializableDateTime::createFromFormat(
             format: 'd-n-Y',
-            datetime: (1 + $numberOfDaysInPreviousMonth - ($this->month->getWeekDayOfFirstDay() - 1)).'-'.$previousMonth->getMonth().'-'.$previousMonth->getYear(),
+            datetime: $firstDayNumber.'-'.$previousMonth->getMonth().'-'.$previousMonth->getYear(),
         );
         
-        // Calculate the last day we need to show (up to 6 days into next month)
-        $potentialDaysInNextMonth = (7 - (($this->month->getWeekDayOfFirstDay() + $this->month->getNumberOfDays() - 1) % 7)) % 7;
+        // Calculate the last day we need to show
+        // We always show at least the current month, and may show up to 6 days into next month
+        // Use a safe upper bound: last day of current month + 6 days
+        $lastDayOfMonth = $this->month->getNumberOfDays();
         $lastDayToShow = SerializableDateTime::createFromFormat(
             format: 'd-n-Y',
-            datetime: max(1, $potentialDaysInNextMonth).'-'.$nextMonth->getMonth().'-'.$nextMonth->getYear(),
+            datetime: ($lastDayOfMonth).'-'.$this->month->getMonth().'-'.$this->month->getYear(),
         );
+        // Add 6 days to cover any potential next month days
+        $lastDayToShow = SerializableDateTime::fromDateTimeImmutable($lastDayToShow->modify('+6 days'));
 
         $allActivities = $this->activityRepository->findByDateRange($firstDayToShow, $lastDayToShow, null);
         
