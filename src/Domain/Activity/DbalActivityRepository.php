@@ -23,6 +23,10 @@ final class DbalActivityRepository implements ActivityRepository
 {
     /** @var array<int|string, Activities> */
     public static array $cachedActivities = [];
+    /** @var array<string, Activities> */
+    public static array $cachedActivitiesByStartDate = [];
+    /** @var array<string, Activities> */
+    public static array $cachedActivitiesBySportTypes = [];
 
     public function __construct(
         private readonly Connection $connection,
@@ -101,7 +105,11 @@ final class DbalActivityRepository implements ActivityRepository
 
     public function findByStartDate(SerializableDateTime $startDate, ?ActivityType $activityType): Activities
     {
-        // @TODO: Add static cache to this call.
+        $cacheKey = $startDate->format('Y-m-d').'-'.($activityType?->value ?? 'all');
+        if (array_key_exists($cacheKey, DbalActivityRepository::$cachedActivitiesByStartDate)) {
+            return DbalActivityRepository::$cachedActivitiesByStartDate[$cacheKey];
+        }
+
         $queryBuilder = $this->connection->createQueryBuilder();
         $queryBuilder->select('*')
             ->from('Activity')
@@ -125,10 +133,14 @@ final class DbalActivityRepository implements ActivityRepository
                 );
         }
 
-        return Activities::fromArray(array_map(
+        $activities = Activities::fromArray(array_map(
             fn (array $result): Activity => $this->hydrate($result),
             $queryBuilder->executeQuery()->fetchAllAssociative()
         ));
+        
+        DbalActivityRepository::$cachedActivitiesByStartDate[$cacheKey] = $activities;
+
+        return $activities;
     }
 
     public function findByDateRange(SerializableDateTime $startDate, SerializableDateTime $endDate, ?ActivityType $activityType): Activities
@@ -164,7 +176,11 @@ final class DbalActivityRepository implements ActivityRepository
 
     public function findBySportTypes(SportTypes $sportTypes): Activities
     {
-        // @TODO: Add static cache to this call.
+        $cacheKey = implode('-', $sportTypes->map(fn (SportType $sportType) => $sportType->value));
+        if (array_key_exists($cacheKey, DbalActivityRepository::$cachedActivitiesBySportTypes)) {
+            return DbalActivityRepository::$cachedActivitiesBySportTypes[$cacheKey];
+        }
+
         $queryBuilder = $this->connection->createQueryBuilder();
         $queryBuilder->select('*')
             ->from('Activity')
@@ -176,10 +192,14 @@ final class DbalActivityRepository implements ActivityRepository
             )
             ->orderBy('startDateTime', 'DESC');
 
-        return Activities::fromArray(array_map(
+        $activities = Activities::fromArray(array_map(
             fn (array $result): Activity => $this->hydrate($result),
             $queryBuilder->executeQuery()->fetchAllAssociative()
         ));
+        
+        DbalActivityRepository::$cachedActivitiesBySportTypes[$cacheKey] = $activities;
+
+        return $activities;
     }
 
     public function hasForSportTypes(SportTypes $sportTypes): bool
