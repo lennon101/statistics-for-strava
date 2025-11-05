@@ -101,16 +101,21 @@ final class StreamBasedActivityHeartRateRepository implements ActivityHeartRateR
         ];
         StreamBasedActivityHeartRateRepository::$cachedHeartRateZonesInLastXDays = StreamBasedActivityHeartRateRepository::$cachedHeartRateZones;
 
+        // Optimization: Fetch all heart rate streams in a single query instead of querying per activity (N+1 problem)
+        $heartRateStreams = $this->activityStreamRepository->findByStreamType(StreamType::HEART_RATE);
+        $heartRateStreamsByActivityId = [];
+        foreach ($heartRateStreams as $heartRateStream) {
+            $heartRateStreamsByActivityId[(string) $heartRateStream->getActivityId()] = $heartRateStream;
+        }
+
         /** @var \App\Domain\Activity\Activity $activity */
         foreach ($activities as $activity) {
-            try {
-                $heartRateStreamForActivity = $this->activityStreamRepository->findOneByActivityAndStreamType(
-                    activityId: $activity->getId(),
-                    streamType: StreamType::HEART_RATE
-                );
-            } catch (EntityNotFound) {
+            $activityIdKey = (string) $activity->getId();
+            if (!isset($heartRateStreamsByActivityId[$activityIdKey])) {
                 continue;
             }
+            
+            $heartRateStreamForActivity = $heartRateStreamsByActivityId[$activityIdKey];
 
             $activityStartDate = $activity->getStartDate();
             $athleteMaxHeartRate = $athlete->getMaxHeartRate($activity->getStartDate());
