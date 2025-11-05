@@ -127,6 +127,66 @@ class DbalActivityRepositoryTest extends ContainerTestCase
         );
     }
 
+    public function testFindByDateRange(): void
+    {
+        $activityOne = ActivityBuilder::fromDefaults()
+            ->withActivityId(ActivityId::fromUnprefixed(1))
+            ->withStartDateTime(SerializableDateTime::fromString('2023-10-10 14:00:34'))
+            ->withSportType(SportType::BADMINTON)
+            ->build();
+        $this->activityWithRawDataRepository->add(ActivityWithRawData::fromState(
+            $activityOne,
+            ['raw' => 'data']
+        ));
+        $activityTwo = ActivityBuilder::fromDefaults()
+            ->withActivityId(ActivityId::fromUnprefixed(2))
+            ->withStartDateTime(SerializableDateTime::fromString('2023-10-10 13:00:34'))
+            ->withSportType(SportType::RUN)
+            ->build();
+        $this->activityWithRawDataRepository->add(ActivityWithRawData::fromState(
+            $activityTwo,
+            ['raw' => 'data']
+        ));
+        $activityThree = ActivityBuilder::fromDefaults()
+            ->withActivityId(ActivityId::fromUnprefixed(3))
+            ->withSportType(SportType::MOUNTAIN_BIKE_RIDE)
+            ->withStartDateTime(SerializableDateTime::fromString('2023-10-09 14:00:34'))
+            ->build();
+        $this->activityWithRawDataRepository->add(ActivityWithRawData::fromState(
+            $activityThree,
+            ['raw' => 'data']
+        ));
+        $activityFour = ActivityBuilder::fromDefaults()
+            ->withActivityId(ActivityId::fromUnprefixed(4))
+            ->withSportType(SportType::RUN)
+            ->withStartDateTime(SerializableDateTime::fromString('2023-10-11 14:00:34'))
+            ->build();
+        $this->activityWithRawDataRepository->add(ActivityWithRawData::fromState(
+            $activityFour,
+            ['raw' => 'data']
+        ));
+
+        // Should find activities within date range
+        $this->assertEquals(
+            [$activityOne->getId(), $activityTwo->getId(), $activityThree->getId()],
+            $this->activityRepository->findByDateRange(
+                SerializableDateTime::fromString('2023-10-09'),
+                SerializableDateTime::fromString('2023-10-10'),
+                null
+            )->map(fn (Activity $activity) => $activity->getId())
+        );
+
+        // Should filter by activity type
+        $this->assertEquals(
+            [$activityOne->getId()],
+            $this->activityRepository->findByDateRange(
+                SerializableDateTime::fromString('2023-10-09'),
+                SerializableDateTime::fromString('2023-10-10'),
+                ActivityType::RACQUET_PADDLE_SPORTS
+            )->map(fn (Activity $activity) => $activity->getId())
+        );
+    }
+
     public function testFindBySportTypes(): void
     {
         $activityOne = ActivityBuilder::fromDefaults()
